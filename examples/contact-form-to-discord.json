@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "name": "Contact form notification",
+  "nodes": [
+    {"id":"trigger","type":"webhook_trigger","config":{"webhookId":"contact-form-demo"}},
+    {"id":"validate","type":"condition","config":{"left":"{{ trigger.email }}","operator":"exists"}},
+    {"id":"result","type":"workflow_result","config":{"status":"accepted","email":"{{ trigger.email }}"}}
+  ],
+  "edges": [
+    {"source":"trigger","target":"validate"},
+    {"source":"validate","target":"result","sourceHandle":"true"}
+  ]
+}
