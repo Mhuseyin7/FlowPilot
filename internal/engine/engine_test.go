@@ -1,0 +1,3 @@
+package engine
+import("context";"testing";"github.com/flowpilot/flowpilot/internal/domain")
+func TestRunRoutesCondition(t *testing.T){g:=domain.Graph{Nodes:[]domain.Node{{ID:"t",Type:"manual_trigger"},{ID:"c",Type:"condition",Config:map[string]any{"left":"{{ trigger.ok }}","right":true,"operator":"equals"}},{ID:"r",Type:"workflow_result",Config:map[string]any{"value":"good"}}},Edges:[]domain.Edge{{Source:"t",Target:"c"},{Source:"c",Target:"r",SourceHandle:"true"}}};out,e:=Run(context.Background(),g,map[string]any{"ok":true},func(string,string,map[string]any){});if e!=nil||out["value"]!="good"{t.Fatalf("out=%v err=%v",out,e)}}
