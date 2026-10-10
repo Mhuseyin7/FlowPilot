@@ -45,7 +45,7 @@ func ValidateGraph(g Graph) []string {
 			errs = append(errs, "edge references an unknown node")
 			continue
 		}
-		key := edge.Source + "\x00" + edge.Target + "\x00" + edge.Handle
+		key := edge.Source + "\x00" + edge.Target + "\x00" + edge.SourceHandle
 		if edges[key] {
 			errs = append(errs, "duplicate edges are not allowed")
 			continue
