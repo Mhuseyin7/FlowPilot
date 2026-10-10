@@ -62,7 +62,8 @@ func execute(ctx context.Context, n domain.Node, data map[string]any) (map[strin
 		raw, _ := resolve(c["url"], data).(string); if err := safeURL(raw); err != nil { return nil, "", err }
 		method, _ := c["method"].(string); if method == "" { method="GET" }
 		req, err := http.NewRequestWithContext(ctx, method, raw, nil); if err != nil { return nil,"",err }
-		client:=http.Client{Timeout:10*time.Second, CheckRedirect: func(r *http.Request, _ []*http.Request) error { return safeURL(r.URL.String()) }}
+		client, err := safeHTTPClient(raw)
+		if err != nil { return nil, "", err }
 		started:=time.Now(); resp,err:=client.Do(req);if err!=nil{return nil,"",err};defer resp.Body.Close()
 		return map[string]any{"status":resp.StatusCode,"durationMs":time.Since(started).Milliseconds()},"",nil
 	case "workflow_result":
@@ -73,4 +74,13 @@ func execute(ctx context.Context, n domain.Node, data map[string]any) (map[strin
 func resolve(v any, data map[string]any) any { s,ok:=v.(string);if !ok||!strings.HasPrefix(s,"{{")||!strings.HasSuffix(s,"}}") {return v};parts:=strings.Split(strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(s,"{{"),"}}")),".");var x any=data;for _,p:=range parts{m,ok:=x.(map[string]any);if !ok{return nil};x=m[p]};return x }
 func compare(a,b any,op string) bool { switch op {case "equals":return fmt.Sprint(a)==fmt.Sprint(b);case "not_equals":return fmt.Sprint(a)!=fmt.Sprint(b);case "exists":return a!=nil;case "contains":return strings.Contains(fmt.Sprint(a),fmt.Sprint(b));case "greater_than":return number(a)>number(b);case "less_than":return number(a)<number(b)};return false }
 func number(v any)float64{var f float64;_ = json.Unmarshal([]byte(fmt.Sprint(v)),&f);return f}
-func safeURL(raw string) error { u,e:=url.Parse(raw);if e!=nil||u.Scheme!="http"&&u.Scheme!="https"||u.Hostname()==""{return errors.New("invalid HTTP URL")};ips,e:=net.LookupIP(u.Hostname());if e!=nil{return e};for _,ip:=range ips{if ip.IsLoopback()||ip.IsPrivate()||ip.IsLinkLocalUnicast()||ip.IsUnspecified(){return errors.New("private or local HTTP targets are blocked")}};return nil }
+func safeURL(raw string) error { u,e:=url.Parse(raw);if e!=nil||u.Scheme!="http"&&u.Scheme!="https"||u.Hostname()==""||u.User!=nil||u.Fragment!=""{return errors.New("invalid HTTP URL")};ips,e:=net.LookupIP(u.Hostname());if e!=nil{return e};for _,ip:=range ips{if ip.IsLoopback()||ip.IsPrivate()||ip.IsLinkLocalUnicast()||ip.IsUnspecified(){return errors.New("private or local HTTP targets are blocked")}};return nil }
+
+func safeHTTPClient(raw string) (*http.Client,error) {
+	if err:=safeURL(raw);err!=nil{return nil,err}
+	u,_:=url.Parse(raw);ips,_:=net.LookupIP(u.Hostname());if len(ips)==0{return nil,errors.New("host has no reachable address")}
+	port:=u.Port();if port==""{if u.Scheme=="https"{port="443"}else{port="80"}}
+	pinned:=ips[0].String();dialer:=&net.Dialer{Timeout:5*time.Second}
+	transport:=&http.Transport{Proxy:http.ProxyFromEnvironment,DialContext:func(ctx context.Context,network,address string)(net.Conn,error){return dialer.DialContext(ctx,network,net.JoinHostPort(pinned,port))}}
+	return &http.Client{Timeout:10*time.Second,Transport:transport,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return http.ErrUseLastResponse}},nil
+}
